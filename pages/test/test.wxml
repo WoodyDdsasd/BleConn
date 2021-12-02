@@ -1,0 +1,2 @@
+<view bindtap='startEncrypt'>开始加密</view>
+<view bindtap='testwhatever5'>测试</view>
