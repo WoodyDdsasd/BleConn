@@ -256,5 +256,6 @@ function binl2b64(binarray)
 }
 
 module.exports = {
-  hex_md5: hex_md5
+  hex_md5: hex_md5,
+  core_md5: core_md5
 }

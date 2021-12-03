@@ -1,4 +1,5 @@
 var CryptoJS = require('../../utils/crypto-js/crypto-js');
+const { core_md5 } = require('../../utils/md5');
 var MD5 = require('../../utils/md5');
 
 var CRC16 = function(data) {
@@ -153,9 +154,95 @@ Page({
     }
   },
   testwhatever5(){
-    var i=10;
-    if(i<5) var a = 0;
-    else var a = 1;
-    console.log(a);
+    var arr = new Uint8Array(10);
+    for(var i=0; i<10; i++){
+      arr[i] = i;
+    }
+    var str = bytesToHex(arr);
+    console.log(str);
+
+    var arr_bk = hexToBytes(str);
+    for(var i = 0; i<arr_bk.length; i++){
+      console.log(i,',',arr_bk[i]);
+    }
+  },
+  testwhatever6(){
+    var arr = new Uint8Array(8);
+    for(var i=0; i<8; i++){
+      arr[i] = i;
+    }
+    var sn = arr[0] << 24 &0xff000000 | arr[1] <<16 &0xff0000 | arr[2] <<8 &0xff00 | arr[3] &0xff;
+    var ask_sn = arr[4] << 24 &0xff000000 | arr[5] <<16 &0xff0000 | arr[6] <<8 &0xff00 | arr[7] &0xff;
+    console.log(sn,',',ask_sn);
+  },
+  testwhatever7(){
+    var arr = new Uint8Array(4);
+    for(var i=0; i<4; i++){
+      arr[i] = 's'.charCodeAt(0);
+    }
+    var word = [];
+    word[0] = arr[3] << 24& 0xff000000 | arr[2] <<16 &0xff0000 | arr[1] <<8 & 0xff00| arr[0] &0xff;
+    var arr_words = MD5.core_md5(word, 4*8);
+    var str = '';
+    for(var i=0; i<4; i++){
+      
+      console.log(arr_words[i]  &0xff);
+      console.log(arr_words[i] >> 8 &0xff);
+      
+      console.log(arr_words[i] >> 16 &0xff);
+      console.log(arr_words[i] >> 24 & 0xff);
+      
+      
+    }
+  },
+  testwhatever9(){
+    var arr = [0x32,0x4c,0xf2,0x6b,0x36,0xcb,0x90,0x74,0x26,0x88,0x33,0x23,0x97,0xdc,0x66,0xa2,0x32,0x05,0x58,0x90,0x3b,0x2d,0x56,0x40,0xae,0x7f,0x68,0x09,0x77,0xa8,0xd3,0xca]
+    var arr8 = new Uint8Array(32);
+    for(var i=0; i<32; i++){
+      arr8[i] = arr[i];
+    }
+
+    console.log(wx.arrayBufferToBase64(arr8.buffer));
+    
   }
-})
+});
+function bytesToHex(arr){
+  var str = '';
+  var tab = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'];
+
+  for(var i=0; i<arr.length; i++){
+    str += tab[arr[i] >>>4];
+    str += tab[arr[i] & 0x0f];
+  }
+  return str;
+}
+function hexToBytes(str){
+  if(str.length % 2 != 0){
+    return null;
+  }
+  var arr = new Uint8Array(str.length/2);
+  for(var i=0; i<str.length/2; i++){
+    var hi = str.charCodeAt(i*2);
+    var lo = str.charCodeAt(i*2+1);
+    if(hi>=48 & hi <=57){
+      var h = hi-48;
+    }else if(hi>=65 && hi<=70){
+      var h = hi-64+10;
+    } else if(hi>=97 && hi<=102){
+      var h = hi-97+10;
+    }else{
+      throw 'hex str format error';
+    }
+    if(lo>=48 & lo <=57){
+      var l = lo-48;
+    }else if(lo>=65 && lo<=70){
+      var l = lo-64+10;
+    } else if(lo>=97 && lo<=102){
+      var l = lo-97+10;
+    }else{
+      throw 'hex str format error';
+    }
+    arr[i] = h << 4 | l;
+  }
+  return arr;
+}

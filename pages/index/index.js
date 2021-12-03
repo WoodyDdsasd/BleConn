@@ -1,31 +1,15 @@
 var CryptoJS = require('../../utils/crypto-js/crypto-js');
-
-var CRC16 = function (data, len) {
-  if (len > 0) {
-      var crc = 0xFFFF;
-
-      for (var i = 0; i < len; i++) {
-          crc = (crc ^ (data[i]));
-          for (var j = 0; j < 8; j++) {
-              crc = (crc & 1) != 0 ? ((crc >> 1) ^ 0xA001) : (crc >> 1);
-          }
-      }
-      var hi = ((crc & 0xFF00) >> 8);  //高位置
-      var lo = (crc & 0x00FF);         //低位置
-
-      return [hi, lo];
-  }
-  return [0, 0];
-};
+var Util = require('../../utils/util');
 
 class BlePacket{
   static s_sn = 0;
   static s_ask_sn = 0;
 
-  static packet(flag, func_code, data, key, iv,is_key_str){
+  static packet(pkt){
     var data_len = 0;
-    if(data) {
-      data_len = data.length;
+
+    if(pkt.data) {
+      data_len = pkt.data.length;
     }
     var totalReal = 4+4+2+2+data_len+2;
     var total = totalReal;
@@ -35,11 +19,11 @@ class BlePacket{
     
     this.wordsToBytes(arr8, 0, s_sn);
     this.wordsToBytes(arr8, 4, s_ask_sn);
-    this.shortsToBytes(arr8, 8, func_code);
-    this.shortsToBytes(arr8, 10, data_len);
+    this.shortsToBytes(arr8, 8, pkt.func_code);
+    this.shortsToBytes(arr8, 10, pkt.data_len); //pkt.data_len不是真正的长度，有可能是dp个数
 
     for(var i=0; i < data_len; i++){
-      arr8[12+i] = data[i];
+      arr8[12+i] = pkt.data[i];
     }
     var crc16 = CRC16(arr8, totalReal - 2);
     arr8[totalReal - 2] = crc16[0];
@@ -49,93 +33,57 @@ class BlePacket{
     for(var i=totalReal; i<total; i++){
       arr8[i] = 0;
     }
+    return arr8;
+  }
+  
 
-    /*    调试         */
-    printBytes(arr8);
+  parse(arr8){
+    var packet_len = arr8.length;
+    var pkt = {};
 
-   
-    var iv_words = CryptoJS.enc.Utf8.parse(iv);
-    if(is_key_str)
-      var key_words = CryptoJS.enc.Utf8.parse(key);
-    else
-      var key_words = key;
+    pkt.sn = arr8[0] << 24 &0xff000000 | arr8[1] <<16 &0xff0000 | arr8[2] <<8 &0xff00 | arr8[3] &0xff;
+    pkt.ask_sn = arr8[4] << 24 &0xff000000 | arr8[5] <<16 &0xff0000 | arr8[6] <<8 &0xff00 | arr8[7] &0xff;
+    pkt.func_code = arr8[8] << 8 & 0xff00 | arr8[9] & 0xff;
+    pkt.data_len = arr8[10] << 8 & 0xff00 | arr8[11] & 0xff;
 
-    var view = new Uint32Array(arr8.buffer);
-    var data_words = CryptoJS.lib.WordArray.create(view, total);
-
-    var ret = CryptoJS.AES.encrypt(data_words, key_words, {
-      iv:iv_words,
-      mode:CryptoJS.mode.CBC,
-      padding:CryptoJS.pad.Pkcs7
-    });
-
-    for(var i=0; i<total/4; i++){
-      wordsToBytes(arr8, i*4, ret.ciphertext[i]);
+    if(Math.ceil((pkt.data_len + 14)/16)*16 != arr8.length){
+      console.log('parse error: length is not correct');
+      return;
     }
-
-    /*    调试         */
-    printBytes(arr8);
-
-    var head = new Uint8Array(17);
-    head[0] = flag;
-    var iv_arr = iv.split('');
-    for(var i=0; i<16; i++){
-      head[i+1] = iv[i];
+    pkt.data = new Uint8Array(pkt.data_len);
+    for(var i=0; i<pkt.data_len; i++){
+      pkt.data[i] = arr8[12+i];
     }
-
-    var final = new Uint8Array(17+total);
-    final.set(head, 0);
-    final.set(this.arr8, 17);
-    return final.buffer;
+    return pkt;
   }
 
-  parse(arrbuf, key, is_key_str){
-      var arr8 = new Uint8Array(arrbuf);
-      var packet_len = arr8.length;
-      if(packet_len < 23 && (packet_len - 17)%16!=0){
-        console.log("packet is not correct.");
-        return;
-      }
+  parseDeviceMsg(arr){
+    var dev_msg = {};
+    var offset = 0;
 
-      var iv_view = new Uint32Array(4);
+    dev_msg.gujian_version1 = arr[offset++] << 8 | arr[offset++];
+    dev_msg.protocal_version = arr[offset++] << 8  | arr[offset++];
+    dev_msg.flag = arr[offset++];
+    dev_msg.bond = arr[offset++];
+    dev_msg.srand = new Uint8Array(6);
+    for(var i=0; i<6; i++){
+      dev_msg.srand[i] = arr[offset++]
+    }
+    dev_msg.hardware_version1 = arr[offset++] << 8  | arr[offset++];
+    dev_msg.auth_key = new Uint8Array(32);
+    for(var i=0; i<32; i++){
+      dev_msg.auth_key[i] = arr[offset++];
+    }
+    dev_msg.gujian_version2 = arr[offset++] <<16  | arr[offset++] <<8  | arr[offset++];
+    dev_msg.hardware_version2 = arr[offset++] <<16  | arr[offset++] <<8  | arr[offset++];
+    dev_msg.commu_ability = arr[offset++] << 8 | arr[offset++];
+    offset++;//reserve
+    dev_msg.virtual_id = new Uint8Array(22);
+    for(var i=0; i<22; i++){
+      dev_msg.virtual_id[i] = arr[offset++];
+    }
+    return dev_msg;
 
-      //convert bytes to words. +1 是因为iv从arr8的1下标开始
-      for(var i=0; i<4; i++)
-        iv_view[i] = arr8[1+i*4] << 24 &0xff000000 | arr8[1+i*4+1] <<16 &0xff0000 | arr8[1+i*4+2] <<8 &0xff00 | arr8[1+i*4+3] &0xff;
-
-      var iv_words = CryptoJS.lib.WordArray.create(iv_view, 16);
-      var key_words = CryptoJS.enc.Utf8.parse(key);
-
-      var crypted_view = Uint32Array((packet_len-17)/4);
-
-      for(var i=0; i<(packet_len-17)/4; i++)
-        iv_view[i] = arr8[17+i*4] << 24 &0xff000000 | arr8[17+i*4+1] <<16 &0xff0000 | arr8[17+i*4+2] <<8 &0xff00 | arr8[17+i*4+3] &0xff;
-
-      var crypted_words = CryptoJS.lib.WordArray.create(iv_view, packet_len - 17);
-
-      var ret = CryptoJS.AES.decrypt(crypted_words, key_words,{
-        iv: iv_words,
-        mode:CryptoJS.mode.CBC,
-        padding:CryptoJS.pad.Pkcs7
-      });
-
-      //把解密出来的数据写回到原来的空间
-      for(var i=0; i<ret.ciphertext.length; i++){
-        this.wordsToBytes(arr8, 17 + i*4, ret.ciphertext[i]);
-      }
-
-      this.flag = arr8[0];
-      this.sn = arr8[17] << 24 &0xff000000 | arr8[18] <<16 &0xff0000 | arr8[19] <<8 &0xff00 | arr8[20] &0xff;
-      this.ask_sn = arr8[21] << 24 &0xff000000 | arr8[22] <<16 &0xff0000 | arr8[23] <<8 &0xff00 | arr8[24] &0xff;
-      this.func_code = arr8[25] << 8 & 0xff00 | arr8[26] & 0xff;
-      this.data_len = arr8[27] << 8 & 0xff00 | arr8[28] & 0xff;
-
-      //校验长度
-      if(Math.ceil((this.data_len + 14)/16)*16 != packet_len - 17){
-        console.log("decrypt error");
-        return;
-      }
-      this.data = arr8.subarray(19,this.data_len+19);
   }
 
   static randomIv(){
@@ -187,9 +135,46 @@ class BlePacket{
 
 
 }
+function bytesToHex(arr){
+  var str = '';
+  var tab = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'];
 
-var auth_key = 'D1dHQJmhGYdc8rcoLlLXcQEag1AgBtEM';
-var device_uuid = 'bc83912be7b75198';
+  for(var i=0; i<arr.length; i++){
+    str += tab[arr[i] >>>4];
+    str += tab[arr[i] & 0x0f];
+  }
+  return str;
+}
+function hexToBytes(str){
+  if(str.length % 2 != 0){
+    return null;
+  }
+  var arr = new Uint8Array(str.length/2);
+  for(var i=0; i<str.length/2; i++){
+    var hi = str.charCodeAt(i*2);
+    var lo = str.charCodeAt(i*2+1);
+    if(hi>=48 & hi <=57){
+      var h = hi-48;
+    }else if(hi>=65 && hi<=70){
+      var h = hi-64+10;
+    } else if(hi>=97 && hi<=102){
+      var h = hi-97+10;
+    }else{
+      throw 'hex str format error';
+    }
+    if(lo>=48 & lo <=57){
+      var l = lo-48;
+    }else if(lo>=65 && lo<=70){
+      var l = lo-64+10;
+    } else if(lo>=97 && lo<=102){
+      var l = lo-97+10;
+    }else{
+      throw 'hex str format error';
+    }
+    arr[i] = h << 4 | l;
+  }
+  return arr;
+}
 
 Page({
   data:{
@@ -200,7 +185,7 @@ Page({
     bSearching:false,
     bConnected:false,
     bBinded:false,
-
+    readSnTab:{}
   },
   resetStatus(){
     this.setData({
@@ -265,6 +250,7 @@ Page({
   
   connectBle(){
     var pg = this;
+    this.data.deviceFound.deviceUUID = "bc83912be7b75198";//假设我已经算出来了
     wx.createBLEConnection({
       deviceId:pg.data.deviceFound.deviceId,
       success(res){
@@ -277,14 +263,168 @@ Page({
         console.log('连接失败');
       }
     });
+    wx.notifyBLECharacteristicValueChange({
+      deviceId: pg.data.deviceFound.deviceId,
+      serviceId: '1910',
+      characteristicId: '2b10',
+      state:true,
+      type:'notification',
+      success:function(res){
+        console.log('notify set success');
+      },
+      fail: function(res){
+        console.log('notify failed : ',res)
+      }
+    });
+    wx.onBLECharacteristicValueChange(characteristicValueChange);
   },
-  bindBle(){
-    var server_rand = BlePacket.randomIv();
-    var secret_key_1;
-    var iv_words = CryptoJS.enc.Utf8.parse(server_rand);
-    var key_words = CryptoJS.enc.Utf8.parse(auth_key);
+  aes_encrypt(arr, key, iv, func_succ){
+    //var str = bytesToHex(arr);
+    wx.request({
+      url: 'https://suo.zhongyeyl.cn/wxapi/secret/ase_cbc_encrypt',
+      method: 'POST',
+      data: arr,
+      key: key,
+      iv: iv,
+      success:func_succ,
+      fail:function(res){
+        console.log('aes encrypt fail:', res)
+      }
+    });
+  },
+  aes_decrypt(arr, key, iv, func_succ){
+    wx.request({
+      url: 'https://suo.zhongyeyl.cn/wxapi/secret/ase_cbc_decrypt',
+      method: 'POST',
+      data: arr,
+      key: key,
+      iv: iv,
+      success:func_succ,
+      fail:function(res){
+        console.log('aes encrypt fail:', res)
+      }
+    });
+  },
+  writeBle(arr, func_succ){
+    wx.writeBLECharacteristicValue({
+      deviceId: pg.data.deviceFound.deviceId,
+      serviceId: '1910',
+      characteristicId: '2b11', 
+      value: arr.buffer,
+      success: function(res){
+        BlePacket.s_sn++;
+        func_succ(res);
+      },
+      fail: function(res){
+        console.log('write ble error:', res);
+      }
+    });
+  },
+  //不知道这个是不是多余
+  readBle(){
+    wx.readBLECharacteristicValue({
+      deviceId: pg.data.deviceFound.deviceId,
+      serviceId: '1910',
+      characteristicId: '2b10',
+      success:function(res){
+        console.log("readBLECharacteristicValue success");
+      },
+      fail:function(res){
+        console.log("readBLECharacteristicValue fail:",res);
+      }
+    });
+  },
+  characteristicValueChange(res){
+    var arr = new Uint8Array(res.value);
+    var iv = arr.subarray(1,17);
+    var encrypted_arr = arr.subarray(17,arr.length);
+    var that = this;
     
-    
+    if((arr.length - 17) % 16 !=0){
+      console.log('length error');
+      return;
+    }
+
+    //secret_key_1
+    if(arr[0] == 1){
+      var key = this.data.secret_key_1;
+    }else if(arr[0] == 5){
+      var key = this.data.session_key;
+    }else{
+      console.log("secert flags error:",err[0]);
+    }
+
+    //decrypt
+    aes_decrypt(encrypted_arr, key, iv, function(res){
+      var decrypted_arr = res.data.decrypt_data;
+      var pkt = BlePacket.parse(decrypted_arr);
+      if(!pkt){
+        console.log('packet parse error');
+      }
+      if(pkt.func_code == 0 && that.data.readSnTab.getDeviceMsg){
+        that.data.readSnTab.getDeviceMsg = undefined; //读取到了就把标志清空
+        that.analyzeDeviceMsgPacket(pkt);
+      }else if(that.readFlags == 2){
+        that.analyzePairPacket(pkt);
+      }
+
+    })
+
   },
 
+  analyzeDeviceMsgPacket(pkt){
+    this.data.devMsg = BlePacket.parseDeviceMsg(pkt.data);
+    if(this.data.devMsg.bond){
+      console.log('蓝牙设备已绑定');
+      return;
+    }
+    //开始绑定
+    var secret_key_2 = getSecretKey2();
+    
+
+  },
+  analyzePairPacket(pkt){
+
+  },
+  bindBle(){
+    //https://suo.zhongyeyl.cn/wxapi/secret/get_secret_key_1?device_id=bc83912be7bcQEag
+    var that = this;
+    wx.request({
+      url: 'https://suo.zhongyeyl.cn/wxapi/secret/get_secret_key_1',
+      method: 'POST',
+      device_id: that.data.deviceFound.deviceUUID,
+      success:function(res){
+        that.data.secret_key_1 = res.data.secret_key_1;
+        that.data.server_rand = res.data.server_rand;
+        that.getDeviceMsg();
+      },
+      fail:function(res){
+        console.log('get secret key faile:', res);
+      }
+    });
+
+  },
+  getDeviceMsg(){
+    var pkt = {};
+    pkt.flag = 0;
+    pkt.sn = BlePacket.s_sn;
+    pkt.ask_sn = BlePacket.s_ask_sn;
+    var arr = BlePacket.packet(pkt);
+    var that = this;
+
+    this.aes_encrypt(arr, this.data.secret_key_1, server_rand, function(res){
+      var arr_encrypted = res.data.encrypt_data; //暂时这样
+      var arr_all = new Uint8Array(arr_encrypted.length+17);
+        arr_all.set(arr_encrypted,17);
+        arr_all[0] = 1;
+        for(var i=0; i<16; i++){
+          arr_all[1+i] = that.data.server_rand.charCodeAt(i);
+        }
+        writeBle(arr_all, function(){
+          that.data.readSnTab.getDeviceMsg = BlePacket.s_sn;
+          //不知道是否需要
+          readBle();
+        });
+    });
+  }
 })

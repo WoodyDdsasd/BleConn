@@ -14,29 +14,26 @@ const formatNumber = n => {
   return n[1] ? n : `0${n}`
 }
 
-function crc16(buffer) {
-  var crc = 0x0000;
-  var odd;
-  for(var i = 0; i < buffer.length; i++) {
-    crc ^= (buffer[i] << 8)
-    for(var j = 0; j < 8; j++) {
-      odd = crc & 0x8000;
-      crc = crc << 1;
-      if(odd) {
-        crc = crc ^ 0x1021
-      }
-    }
-  }
-  var hi = ((crc & 0xFF00) >> 8); //高位置
-  var lo = (crc & 0x00FF); //低位置
-  var crcArr = [];
-  crcArr.push(lo);
-  crcArr.push(hi);
+function CRC16(data) {
+  var len = data.length;
+  if (len > 0) {
+      var crc = 0xFFFF;
 
-  return crcArr;
-};    
+      for (var i = 0; i < len; i++) {
+          crc = (crc ^ (data[i]));
+          for (var j = 0; j < 8; j++) {
+              crc = (crc & 1) != 0 ? ((crc >> 1) ^ 0xA001) : (crc >> 1);
+          }
+      }
+      var hi = ((crc & 0xFF00) >> 8);  //高位置
+      var lo = (crc & 0x00FF);         //低位置
+
+      return [hi, lo];
+  }
+  return [0, 0];
+}
 
 module.exports = {
   formatTime:formatTime,
-  crc16:crc16
+  CRC16:CRC16
 }
