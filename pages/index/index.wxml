@@ -1,14 +1,10 @@
 <view>
   <button bindtap="searchBle">搜索蓝牙</button>
-  <view wx:if="{{bSearchError}}">{{errMsg}}</view>
   <view wx:if="{{bSearchOne}}">
     {{deviceFound.name}}, {{deviceFound.deviceId}}
-    <button wx:if="{{!bConnected}}" bindtap="connectBle">连接</button>
-    <view wx:else>已连接
-      <button wx:if="{{!bBinded}}" bindtap="bindBle">绑定</button>
-      <text wx:else>绑定</text>
-    </view>
-    
   </view>
-  <view wx:if="{{bSearching}}">搜索中...</view>
+  <button bindtap="connectBle">连接</button>
+  <text>连接状态：{{bConnected?'已连接':'未连接'}}</text>
+  <button bindtap="bindBle">绑定</button>
+  <text>绑定状态：{{bBinded?'已绑定':'未绑定'}}</text>
 </view>

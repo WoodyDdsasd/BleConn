@@ -33,7 +33,62 @@ function CRC16(data) {
   return [0, 0];
 }
 
+function randomBytes(len, max){
+  var arr = new Uint8Array(len);
+  for(var i=0; i<16; i++){
+    
+    var rand = Math.floor(Math.random()*max);
+    arr[i] = rand;
+  }
+  return arr;
+}
+
+function hexToBytes(str){
+  if(str.length % 2 != 0){
+    return null;
+  }
+  var arr = new Uint8Array(str.length/2);
+  for(var i=0; i<str.length/2; i++){
+    var hi = str.charCodeAt(i*2);
+    var lo = str.charCodeAt(i*2+1);
+    if(hi>=48 & hi <=57){
+      var h = hi-48;
+    }else if(hi>=65 && hi<=70){
+      var h = hi-64+10;
+    } else if(hi>=97 && hi<=102){
+      var h = hi-97+10;
+    }else{
+      throw 'hex str format error';
+    }
+    if(lo>=48 & lo <=57){
+      var l = lo-48;
+    }else if(lo>=65 && lo<=70){
+      var l = lo-64+10;
+    } else if(lo>=97 && lo<=102){
+      var l = lo-97+10;
+    }else{
+      throw 'hex str format error';
+    }
+    arr[i] = h << 4 | l;
+  }
+  return arr;
+}
+
+function bytesToHex(arr){
+  var str = '';
+  var tab = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'];
+
+  for(var i=0; i<arr.length; i++){
+    str += tab[arr[i] >>>4];
+    str += tab[arr[i] & 0x0f];
+  }
+  return str;
+}
+
 module.exports = {
   formatTime:formatTime,
-  CRC16:CRC16
+  CRC16:CRC16,
+  randomBytes: randomBytes,
+  hexToBytes:hexToBytes,
+  bytesToHex:bytesToHex,
 }
